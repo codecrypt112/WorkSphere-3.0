@@ -283,10 +283,20 @@ def get_applied_jobs(wallet_address):
             })
             
             if job:
-                job['_id'] = str(job['_id'])
-                # Add application status to the job
-                job['applicationStatus'] = application.get('status', 'pending')
-                applied_jobs.append(job)
+                applied_job = {
+                    '_id': str(job['_id']),
+                    'title': job.get('title', ''),
+                    'description': job.get('description', ''),
+                    'category': job.get('category', ''),
+                    'applicationStatus': application.get('status', 'pending'),
+                    'applicationDetails': {
+                        'coverLetter': application.get('coverLetter', ''),
+                        'expectedBudget': application.get('expectedBudget', ''),
+                        'estimatedTime': application.get('estimatedTime', ''),
+                        'appliedAt': application.get('appliedAt')
+                    }
+                }
+                applied_jobs.append(applied_job)
         
         return jsonify(applied_jobs), 200
 
@@ -307,11 +317,36 @@ def get_created_jobs(wallet_address):
             'creatorWallet': wallet_address
         }))
         
-        # Convert ObjectId to string
+        # Enrich jobs with application information
+        enriched_jobs = []
         for job in jobs:
-            job['_id'] = str(job['_id'])
+            job_details = {
+                '_id': str(job['_id']),
+                'title': job.get('title', ''),
+                'description': job.get('description', ''),
+                'category': job.get('category', ''),
+                'budget': job.get('budget', ''),
+                'deadline': job.get('deadline', ''),
+                'skills': job.get('skills', []),
+                'status': job.get('status', 'active')
+            }
+
+            # Fetch applications for this job
+            job_applications = list(applications_collection.find({
+                'jobId': job['_id']
+            }))
+
+            # Summarize applications
+            job_details['applicationSummary'] = {
+                'total': len(job_applications),
+                'pending': len([a for a in job_applications if a.get('status') == 'pending']),
+                'approved': len([a for a in job_applications if a.get('status') == 'approved']),
+                'rejected': len([a for a in job_applications if a.get('status') == 'rejected'])
+            }
+
+            enriched_jobs.append(job_details)
         
-        return jsonify(jobs), 200
+        return jsonify(enriched_jobs), 200
 
     except Exception as e:
         print("Error fetching created jobs:")
@@ -330,17 +365,24 @@ def get_ongoing_projects(wallet_address):
             'status': 'approved'
         }))
         
-        # Fetch corresponding jobs
+        # Fetch corresponding jobs with additional details
         projects = []
         for project in ongoing_projects:
             job = jobs_collection.find_one({'_id': project['jobId']})
             if job:
-                job['_id'] = str(job['_id'])
-                job['applicationDetails'] = {
-                    'status': project['status'],
-                    'appliedAt': project['appliedAt']
+                project_details = {
+                    '_id': str(job['_id']),
+                    'title': job.get('title', ''),
+                    'description': job.get('description', ''),
+                    'creatorWallet': job.get('creatorWallet', ''),
+                    'applicationDetails': {
+                        'status': project['status'],
+                        'appliedAt': project['appliedAt'],
+                        'expectedBudget': project.get('expectedBudget', ''),
+                        'estimatedTime': project.get('estimatedTime', '')
+                    }
                 }
-                projects.append(job)
+                projects.append(project_details)
         
         return jsonify(projects), 200
 
@@ -360,12 +402,22 @@ def get_job_applications(job_id):
             'jobId': ObjectId(job_id)
         }))
         
-        # Convert ObjectIds to strings
+        # Enrich applications with additional details
+        enriched_applications = []
         for application in applications:
-            application['_id'] = str(application['_id'])
-            application['jobId'] = str(application['jobId'])
+            app_details = {
+                '_id': str(application['_id']),
+                'jobId': str(application['jobId']),
+                'applicantWallet': application.get('applicantWallet', ''),
+                'coverLetter': application.get('coverLetter', ''),
+                'expectedBudget': application.get('expectedBudget', ''),
+                'estimatedTime': application.get('estimatedTime', ''),
+                'status': application.get('status', 'pending'),
+                'appliedAt': application.get('appliedAt')
+            }
+            enriched_applications.append(app_details)
         
-        return jsonify(applications), 200
+        return jsonify(enriched_applications), 200
 
     except Exception as e:
         print("Error fetching job applications:")

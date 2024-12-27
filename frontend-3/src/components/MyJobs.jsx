@@ -12,19 +12,14 @@ const MyJobs = ({ account }) => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [activeTab, setActiveTab] = useState('created');
 
-  useEffect(() => {
-    fetchMyJobs();
-  }, [account]);
-
   const fetchMyJobs = async () => {
     try {
       setLoading(true);
-      // Fetch created jobs
-      const createdJobsResponse = await axios.get(`http://localhost:5000/api/jobs/created/${account}`);
-      // Fetch applied jobs
-      const appliedJobsResponse = await axios.get(`http://localhost:5000/api/jobs/applied/${account}`);
-      // Fetch ongoing projects
-      const ongoingProjectsResponse = await axios.get(`http://localhost:5000/api/projects/ongoing/${account}`);
+      const [createdJobsResponse, appliedJobsResponse, ongoingProjectsResponse] = await Promise.all([
+        axios.get(`http://localhost:5000/api/jobs/created/${account}`),
+        axios.get(`http://localhost:5000/api/jobs/applied/${account}`),
+        axios.get(`http://localhost:5000/api/projects/ongoing/${account}`)
+      ]);
 
       setMyJobs({
         created: createdJobsResponse.data,
@@ -39,9 +34,11 @@ const MyJobs = ({ account }) => {
     }
   };
 
-  const handleViewApplications = (job) => {
-    setSelectedJob(job);
-  };
+  useEffect(() => {
+    if (account) {
+      fetchMyJobs();
+    }
+  }, [account]);
 
   const renderApplicationStatus = (status) => {
     const statusColors = {
@@ -59,88 +56,81 @@ const MyJobs = ({ account }) => {
 
   const ApplicationModal = ({ job, onClose }) => {
     const [applications, setApplications] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [modalLoading, setModalLoading] = useState(true);
+
+    const fetchApplications = async () => {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/jobs/${job._id}/applications`);
+        setApplications(response.data);
+        setModalLoading(false);
+      } catch (err) {
+        console.error('Error fetching applications:', err);
+        setModalLoading(false);
+      }
+    };
 
     useEffect(() => {
-      const fetchApplications = async () => {
-        try {
-          const response = await axios.get(`http://localhost:5000/api/jobs/${job._id}/applications`);
-          setApplications(response.data);
-          setLoading(false);
-        } catch (err) {
-          console.error('Error fetching applications:', err);
-          setLoading(false);
-        }
-      };
-
       fetchApplications();
     }, [job._id]);
 
     const handleApplicationAction = async (applicationId, action) => {
       try {
         await axios.post(`http://localhost:5000/api/jobs/applications/${applicationId}/${action}`);
-        // Refresh applications
-        fetchApplications();
+        await fetchApplications();
+        await fetchMyJobs(); // Refresh all jobs to update status
       } catch (err) {
-        console.error(`Error ${action} application:`, err);
+        console.error(`Error ${action}ing application:`, err);
       }
     };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-8 relative max-h-[80vh] overflow-y-auto">
-          <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 text-gray-600 hover:text-gray-900"
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="h-6 w-6" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M6 18L18 6M6 6l12 12" 
-              />
+          <button onClick={onClose} className="absolute top-4 right-4 text-gray-600 hover:text-gray-900">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
           <h2 className="text-2xl font-bold mb-6">Applications for {job.title}</h2>
 
-          {loading ? (
+          {modalLoading ? (
             <div className="text-center">Loading applications...</div>
           ) : applications.length === 0 ? (
             <div className="text-center text-gray-500">No applications yet</div>
           ) : (
             <div className="space-y-4">
               {applications.map((application) => (
-                <div 
-                  key={application._id} 
-                  className="border rounded-lg p-4 flex justify-between items-center"
-                >
- <div>
-                    <h3 className="font-semibold">{application.applicantWallet}</h3>
-                    <p className="text-sm">{application.coverLetter}</p>
+                <div key={application._id} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold">{application.applicantWallet}</h3>
+                      <p className="text-sm mt-1">{application.coverLetter}</p>
+                      {application.expectedBudget && (
+                        <p className="text-sm mt-1">Expected Budget: ${application.expectedBudget}</p>
+                      )}
+                      {application.estimatedTime && (
+                        <p className="text-sm">Estimated Time: {application.estimatedTime}</p>
+                      )}
+                    </div>
                     {renderApplicationStatus(application.status)}
                   </div>
-                  <div>
-                    <button 
-                      onClick={() => handleApplicationAction(application._id, 'approve')}
-                      className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded mr-2"
-                    >
-                      Approve
-                    </button>
-                    <button 
-                      onClick={() => handleApplicationAction(application._id, 'reject')}
-                      className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-                    >
-                      Reject
-                    </button>
-                  </div>
+                  {application.status === 'pending' && (
+                    <div className="flex gap-2 mt-2">
+                      <button 
+                        onClick={() => handleApplicationAction(application._id, 'approve')}
+                        className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
+                      >
+                        Approve
+                      </button>
+                      <button 
+                        onClick={() => handleApplicationAction(application._id, 'reject')}
+                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -166,10 +156,16 @@ const MyJobs = ({ account }) => {
         >
           Applied Jobs
         </button>
+        <button 
+          onClick={() => setActiveTab('ongoing')}
+          className={`flex-1 py-2 text-center ${activeTab === 'ongoing' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+        >
+          Ongoing Projects
+        </button>
       </div>
 
       {loading ? (
-        <div className="text-center">Loading my jobs...</div>
+        <div className="text-center">Loading jobs...</div>
       ) : (
         <div>
           {activeTab === 'created' && myJobs.created.length > 0 ? (
@@ -178,24 +174,35 @@ const MyJobs = ({ account }) => {
                 <h3 className="font-semibold">{job.title}</h3>
                 <p className="text-sm">{job.description}</p>
                 <button 
-                  onClick={() => handleViewApplications(job)}
+                  onClick={() => setSelectedJob(job)}
                   className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
                 >
                   View Applications
                 </button>
               </div>
             ))
-          ) : activeTab === 'created' ? (
-            <div className="text-center text-gray-500">No created jobs yet</div>
-          ) : myJobs.applied.length > 0 ? (
+          ) : activeTab === 'applied' && myJobs.applied.length > 0 ? (
             myJobs.applied.map((job) => (
               <div key={job._id} className="border rounded-lg p-4 mb-4">
                 <h3 className="font-semibold">{job.title}</h3>
                 <p className="text-sm">Application Status: {renderApplicationStatus(job.applicationStatus)}</p>
               </div>
             ))
+          ) : activeTab === 'ongoing' && myJobs.ongoingProjects.length > 0 ? (
+            myJobs.ongoingProjects.map((project) => (
+              <div key={project._id} className="border rounded-lg p-4 mb-4">
+                <h3 className="font-semibold">{project.title}</h3>
+                <p className="text-sm">{project.description}</p>
+                <div className="mt-2">
+                  <p className="text-sm font-medium">Client: {project.creatorWallet}</p>
+                  <p className="text-sm">Started: {new Date(project.applicationDetails.appliedAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+            ))
           ) : (
-            <div className="text-center text-gray-500">No applied jobs yet</div>
+            <div className="text-center text-gray-500">
+              No {activeTab === 'ongoing' ? 'ongoing projects' : `${activeTab} jobs`} yet
+            </div>
           )}
         </div>
       )}
