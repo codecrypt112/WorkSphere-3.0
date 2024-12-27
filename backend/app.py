@@ -5,7 +5,8 @@ import os
 from flask_cors import CORS
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from flask_cors import cross_origin
+from bson.json_util import dumps
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
@@ -16,6 +17,7 @@ MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?re
 client = MongoClient(MONGO_URI)
 db = client["websphere3"]
 job_collection = db["jobs"]
+users_collection = db["users"]
 
 # Infura setup
 INFURA_URL = "https://mainnet.infura.io/v3/f77611e3621f4e0591f0d90056fe598b"  # Replace with your Infura URL
@@ -26,12 +28,14 @@ if not web3.is_connected():
     raise Exception("Unable to connect to Infura")
 
 @app.route('/jobs', methods=['GET'])
+@cross_origin(origin='http://localhost:5173', headers=['Content-Type'])
 def get_jobs():
     """Fetch all job postings."""
     jobs = list(job_collection.find({}, {"_id": 0}))  # Exclude MongoDB ObjectId from response
     return jsonify(jobs), 200
 
 @app.route('/jobs', methods=['POST'])
+@cross_origin(origin='http://localhost:5173', headers=['Content-Type'])
 def create_job():
     """
     Create a new job posting and store relevant blockchain data in MongoDB.
@@ -44,37 +48,20 @@ def create_job():
     title = data.get("title")
     budget = data.get("budget")
     description = data.get("description")
-    wallet_address = data.get("walletAddress")
-    signature = data.get("signature")
 
-    if not title or not budget or not description or not wallet_address or not signature:
+    if not title or not budget or not description:
         return jsonify({"error": "Missing required fields"}), 400
-
-    # Verify wallet address using signature
-    message = f"Create job posting: {title}"
-    try:
-        message_hash = web3.keccak(text=message)
-        recovered_address = web3.eth.account.recoverHash(message_hash, signature=signature)
-        if recovered_address.lower() != wallet_address.lower():
-            return jsonify({"error": "Invalid signature"}), 401
-    except Exception as e:
-        return jsonify({"error": f"Blockchain verification failed: {str(e)}"}), 500
 
     # Store job data in MongoDB
     job_data = {
         "title": title,
         "budget": budget,
         "description": description,
-        "walletAddress": wallet_address,
-        "blockchainData": {
-            "messageHash": message_hash.hex(),
-            "verifiedAddress": recovered_address,
-        },
         "status": "Open",
     }
 
-    job_collection.insert_one(job_data)
-    return jsonify({"message": "Job created successfully", "job": job_data}), 201
+    result = job_collection.insert_one(job_data)
+    return jsonify({"message": "Job created successfully", "job": dumps(result.inserted_id)}), 201
 
 @app.route('/jobs/<string:title>', methods=['DELETE'])
 def delete_job(title):
@@ -118,9 +105,7 @@ def login():
     if not user or not check_password_hash(user['password'], password):
         return jsonify({'message': 'Invalid credentials'}), 401
 
-    return jsonify({'message': 'User registered successfully'}), 201
-
-users_collection = db["users"]
+    return jsonify({'message': 'User logged in successfully'}), 200
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -128,8 +113,9 @@ def register():
     email = data.get('email')
     username = data.get('username')
     password = data.get('password')
+    role = data.get('role')
 
-    if not email or not username or not password:
+    if not email or not username or not password or not role:
         return jsonify({'message': 'Missing fields'}), 400
 
     if users_collection.find_one({"email": email}):
@@ -139,11 +125,36 @@ def register():
     users_collection.insert_one({
         "email": email,
         "username": username,
-        "password": hashed_password
+        "password": hashed_password,
+        "role": role
     })
+    
 
     return jsonify({'message': 'User registered successfully'}), 201
 
+@app.route('/fetchuserdetails', methods=['POST'])
+def fetch_user_details():
+    """
+    Fetch user details based on the email provided.
+    """
+    data = request.json
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'message': 'Missing email field'}), 400
+
+    user = users_collection.find_one({"email": email})
+
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    user_details = {
+        "username": user['username'],
+        "email": user['email'],
+        "role": user['role']
+    }
+
+    return jsonify(user_details), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
