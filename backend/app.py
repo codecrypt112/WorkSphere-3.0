@@ -8,12 +8,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://obscure-space-couscous-x4wg5jrp764f555-5173.app.github.dev"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+
 
 # MongoDB setup
 MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your MongoDB URI
 client = MongoClient(MONGO_URI)
-db = client["worksphere"]
+db = client["websphere3"]
 job_collection = db["jobs"]
 
 # Infura setup
@@ -119,11 +120,10 @@ def login():
 
     return jsonify({'message': 'User registered successfully'}), 201
 
-db = client["worksphere"]
 users_collection = db["users"]
 
-@app.route('/signup', methods=['POST'])
-def signup():
+@app.route('/register', methods=['POST'])
+def register():
     data = request.json
     email = data.get('email')
     username = data.get('username')
