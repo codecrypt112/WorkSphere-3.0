@@ -1,160 +1,357 @@
 from flask import Flask, request, jsonify
-from pymongo import MongoClient
-from web3 import Web3
-import os
 from flask_cors import CORS
 from pymongo import MongoClient
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_cors import cross_origin
-from bson.json_util import dumps
+from bson import ObjectId
+import json
+from datetime import datetime
+import traceback
+import os
+from dotenv import load_dotenv
+import re  # Add regex for wallet address validation
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-
-# MongoDB setup
-MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your MongoDB URI
-client = MongoClient(MONGO_URI)
-db = client["websphere3"]
-job_collection = db["jobs"]
-users_collection = db["users"]
-
-# Infura setup
-INFURA_URL = "https://mainnet.infura.io/v3/f77611e3621f4e0591f0d90056fe598b"  # Replace with your Infura URL
-web3 = Web3(Web3.HTTPProvider(INFURA_URL))
-
-# Check connection to Infura
-if not web3.is_connected():
-    raise Exception("Unable to connect to Infura")
-
-@app.route('/jobs', methods=['GET'])
-@cross_origin(origin='http://localhost:5173', headers=['Content-Type'])
-def get_jobs():
-    """Fetch all job postings."""
-    jobs = list(job_collection.find({}, {"_id": 0}))  # Exclude MongoDB ObjectId from response
-    return jsonify(jobs), 200
-
-@app.route('/jobs', methods=['POST'])
-@cross_origin(origin='http://localhost:5173', headers=['Content-Type'])
-def create_job():
-    """
-    Create a new job posting and store relevant blockchain data in MongoDB.
-    Requires a signed MetaMask transaction for authentication.
-    """
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    title = data.get("title")
-    budget = data.get("budget")
-    description = data.get("description")
-
-    if not title or not budget or not description:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    # Store job data in MongoDB
-    job_data = {
-        "title": title,
-        "budget": budget,
-        "description": description,
-        "status": "Open",
-    }
-
-    result = job_collection.insert_one(job_data)
-    return jsonify({"message": "Job created successfully", "job": dumps(result.inserted_id)}), 201
-
-@app.route('/jobs/<string:title>', methods=['DELETE'])
-def delete_job(title):
-    """Delete a job posting by title."""
-    result = job_collection.delete_one({"title": title})
-    if result.deleted_count == 0:
-        return jsonify({"error": "Job not found"}), 404
-    return jsonify({"message": "Job deleted successfully"}), 200
-
-@app.route('/jobs/<string:title>', methods=['PUT'])
-def update_job(title):
-    """Update a job's details."""
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    update_fields = {}
-    if "budget" in data:
-        update_fields["budget"] = data["budget"]
-    if "description" in data:
-        update_fields["description"] = data["description"]
-    if "status" in data:
-        update_fields["status"] = data["status"]
-
-    result = job_collection.update_one({"title": title}, {"$set": update_fields})
-    if result.matched_count == 0:
-        return jsonify({"error": "Job not found"}), 404
-
-    return jsonify({"message": "Job updated successfully"}), 200
-
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-
-    if not email or not password:
-        return jsonify({'message': 'Missing fields'}), 400
-
-    user = users_collection.find_one({"email": email})
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'message': 'Invalid credentials'}), 401
-
-    return jsonify({'message': 'User logged in successfully'}), 200
-
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.json
-    email = data.get('email')
-    username = data.get('username')
-    password = data.get('password')
-    role = data.get('role')
-
-    if not email or not username or not password or not role:
-        return jsonify({'message': 'Missing fields'}), 400
-
-    if users_collection.find_one({"email": email}):
-        return jsonify({'message': 'Email already registered'}), 400
-
-    hashed_password = generate_password_hash(password)
-    users_collection.insert_one({
-        "email": email,
-        "username": username,
-        "password": hashed_password,
-        "role": role
-    })
+# MongoDB Connection
+MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority"
+try:
+    client = MongoClient(MONGO_URI)
+    db = client.freelance_platform
+    jobs_collection = db.jobs
+    applications_collection = db.job_applications
     
+    # Test connection
+    client.admin.command('ismaster')
+    print("MongoDB connection successful!")
+except Exception as e:
+    print(f"MongoDB connection error: {e}")
+    raise
 
-    return jsonify({'message': 'User registered successfully'}), 201
+# Custom JSON Encoder
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
-@app.route('/fetchuserdetails', methods=['POST'])
-def fetch_user_details():
+app.json_encoder = CustomJSONEncoder
+
+@app.route('/api/jobs', methods=['GET'])
+def get_jobs():
+    try:
+        # Get query parameters
+        category = request.args.get('filter')
+
+        # Fetch jobs from MongoDB
+        query = {}
+        if category and category != 'all':
+            query['category'] = category
+
+        # Convert cursor to list and handle ObjectId serialization
+        jobs = []
+        for job in jobs_collection.find(query):
+            # Ensure all ObjectId are converted to strings
+            job['_id'] = str(job['_id'])
+            jobs.append(job)
+
+        return jsonify(jobs), 200
+
+    except Exception as e:
+        print("Error fetching jobs:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+def is_valid_ethereum_address(address):
     """
-    Fetch user details based on the email provided.
+    Validate Ethereum wallet address
+    - Starts with 0x
+    - Followed by 40 hexadecimal characters
     """
-    data = request.json
-    email = data.get('email')
+    if not address:
+        return False
+    
+    # Regex pattern for Ethereum address
+    pattern = r'^0x[a-fA-F0-9]{40}$'
+    return re.match(pattern, address) is not None
 
-    if not email:
-        return jsonify({'message': 'Missing email field'}), 400
+@app.route('/api/jobs/create', methods=['POST'])
+def create_job():
+    try:
+        # Get JSON data from request
+        job_data = request.get_json()
+        
+        # Comprehensive validation
+        validation_errors = []
+        
+        # Check required fields
+        required_fields = [
+            ('title', str, 'Job title must be a non-empty string'),
+            ('description', str, 'Job description must be a non-empty string'),
+            ('category', str, 'Category must be a non-empty string'),
+            ('creatorWallet', str, 'Creator wallet address is required')
+        ]
+        
+        for field, field_type, error_message in required_fields:
+            if not job_data.get(field) or not isinstance(job_data.get(field), field_type):
+                validation_errors.append(error_message)
+        
+        # Validate wallet address
+        creator_wallet = job_data.get('creatorWallet', '')
+        if not is_valid_ethereum_address(creator_wallet):
+            validation_errors.append('Invalid Ethereum wallet address')
+        
+        # Optional field validations
+        if job_data.get('budget'):
+            try:
+                float(job_data['budget'])
+            except ValueError:
+                validation_errors.append('Budget must be a valid number')
+        
+        # If there are validation errors, return them
+        if validation_errors:
+            return jsonify({
+                "error": "Validation Failed",
+                "details": validation_errors
+            }), 400
+        
+        # Sanitize and prepare job data
+        sanitized_job_data = {
+            'title': job_data['title'].strip(),
+            'description': job_data['description'].strip(),
+            'category': job_data['category'],
+            'creatorWallet': creator_wallet.lower(),  # Normalize wallet address
+            'skills': job_data.get('skills', []),
+            'budget': job_data.get('budget'),
+            'deadline': job_data.get('deadline'),
+            'created_at': datetime.utcnow(),
+            'status': 'active'
+        }
+        
+        # Insert job into MongoDB
+        result = jobs_collection.insert_one(sanitized_job_data)
+        
+        return jsonify({
+            "message": "Job created successfully",
+            "job_id": str(result.inserted_id)
+        }), 201
+    
+    except Exception as e:
+        print("Error creating job:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
-    user = users_collection.find_one({"email": email})
+# Debugging route to check database connection
+@app.route('/api/debug/db', methods=['GET'])
+def debug_db():
+    try:
+        # Try to get database info
+        database_info = client.list_database_names()
+        return jsonify({
+            "status": "success",
+            "databases": database_info
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "details": str(e)
+        }), 500
 
-    if not user:
-        return jsonify({'message': 'User not found'}), 404
+@app.route('/api/jobs/apply', methods=['POST'])
+def submit_job_application():
+    try:
+        # Get application data from request
+        application_data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['jobId', 'coverLetter', 'applicantWallet']
+        for field in required_fields:
+            if not application_data.get(field):
+                return jsonify({
+                    "error": f"Missing required field: {field}"
+                }), 400
+        
+        # Check if job exists
+        job = jobs_collection.find_one({'_id': ObjectId(application_data['jobId'])})
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        
+        # Ensure applications collection is defined
+        applications_collection = db.job_applications
+        
+        # Check for duplicate applications
+        existing_application = applications_collection.find_one({
+            'jobId': ObjectId(application_data['jobId']),
+            'applicantWallet': application_data['applicantWallet']
+        })
+        
+        if existing_application:
+            return jsonify({
+                "error": "You have already applied to this job",
+                "applicationId": str(existing_application['_id'])
+            }), 400
+        
+        # Prepare application document
+        application = {
+            'jobId': ObjectId(application_data['jobId']),
+            'applicantWallet': application_data['applicantWallet'],
+            'coverLetter': application_data['coverLetter'],
+            'expectedBudget': application_data.get('expectedBudget'),
+            'estimatedTime': application_data.get('estimatedTime'),
+            'status': 'pending',
+            'appliedAt': datetime.utcnow()
+        }
+        
+        # Insert application
+        result = applications_collection.insert_one(application)
+        
+        # Update job to track applications
+        jobs_collection.update_one(
+            {'_id': ObjectId(application_data['jobId'])},
+            {'$push': {'applications': str(result.inserted_id)}}
+        )
+        
+        return jsonify({
+            "message": "Application submitted successfully",
+            "applicationId": str(result.inserted_id)
+        }), 201
+    
+    except Exception as e:
+        print("Error submitting job application:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
-    user_details = {
-        "username": user['username'],
-        "email": user['email'],
-        "role": user['role']
-    }
+@app.route('/api/jobs/applications/<application_id>/<action>', methods=['POST'])
+def handle_application_action(application_id, action):
+    try:
+        # Validate action
+        if action not in ['approve', 'reject']:
+            return jsonify({"error": "Invalid action"}), 400
+        
+        # Update application status
+        result = applications_collection.update_one(
+            {'_id': ObjectId(application_id)},
+            {'$set': {'status': action}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Application not found"}), 404
+        
+        # If approved, you might want to add additional logic here
+        # For example, updating job status or creating a contract
+        
+        return jsonify({
+            "message": f"Application {action}d successfully",
+            "status": action
+        }), 200
 
-    return jsonify(user_details), 200
+    except Exception as e:
+        print(f"Error {action}ing application:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+@app.route('/api/jobs/applied/<wallet_address>', methods=['GET'])
+def get_applied_jobs(wallet_address):
+    try:
+        # Find application IDs for the user
+        user_applications = list(applications_collection.find({
+            'applicantWallet': wallet_address
+        }))
+        
+        # Fetch corresponding jobs
+        applied_jobs = []
+        for application in user_applications:
+            job = jobs_collection.find_one({
+                '_id': application['jobId']
+            })
+            
+            if job:
+                job['_id'] = str(job['_id'])
+                # Add application status to the job
+                job['applicationStatus'] = application.get('status', 'pending')
+                applied_jobs.append(job)
+        
+        return jsonify(applied_jobs), 200
+
+    except Exception as e:
+        print("Error fetching applied jobs:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+
+@app.route('/api/jobs/created/<wallet_address>', methods=['GET'])
+def get_created_jobs(wallet_address):
+    try:
+        # Find jobs created by the wallet address
+        jobs = list(jobs_collection.find({
+            'creatorWallet': wallet_address
+        }))
+        
+        # Convert ObjectId to string
+        for job in jobs:
+            job['_id'] = str(job['_id'])
+        
+        return jsonify(jobs), 200
+
+    except Exception as e:
+        print("Error fetching created jobs:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+@app.route('/api/projects/ongoing/<wallet_address>', methods=['GET'])
+def get_ongoing_projects(wallet_address):
+    try:
+        # Find applications that were approved for this wallet
+        ongoing_projects = list(applications_collection.find({
+            'applicantWallet': wallet_address,
+            'status': 'approved'
+        }))
+        
+        # Fetch corresponding jobs
+        projects = []
+        for project in ongoing_projects:
+            job = jobs_collection.find_one({'_id': project['jobId']})
+            if job:
+                job['_id'] = str(job['_id'])
+                job['applicationDetails'] = {
+                    'status': project['status'],
+                    'appliedAt': project['appliedAt']
+                }
+                projects.append(job)
+        
+        return jsonify(projects), 200
+
+    except Exception as e:
+        print("Error fetching ongoing projects:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)

@@ -8,30 +8,13 @@ const WorkSphereFrontend = () => {
   const [authMode, setAuthMode] = useState('login');
   const [walletConnected, setWalletConnected] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [userRole, setUserRole] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [jobBudget, setJobBudget] = useState('');
   const [jobDescription, setJobDescription] = useState('');
-  const [userRole, setUserRole] = useState('');
-
-  const features = [
-    {
-      icon: <Shield className="h-8 w-8 text-blue-500" />,
-      title: "Secure Escrow System",
-      description: "Smart contract-based escrow ensures safe payments and milestone tracking"
-    },
-    {
-      icon: <Star className="h-8 w-8 text-blue-500" />,
-      title: "Blockchain Reputation",
-      description: "Immutable reputation system built on blockchain technology"
-    },
-    {
-      icon: <Zap className="h-8 w-8 text-blue-500" />,
-      title: "Real-Time Updates",
-      description: "Track project progress and communicate in real-time"
-    }
-  ];
-
+  const [selectedJob, setSelectedJob] = useState(null);
   const [jobs, setJobs] = useState([
+  
     {
       id: 1,
       title: 'Frontend Developer Needed',
@@ -49,6 +32,34 @@ const WorkSphereFrontend = () => {
       milestones: ['Contract Development', 'Testing', 'Deployment'],
     }
   ]);
+  const [showPostJobForm, setShowPostJobForm] = useState(false);
+
+   useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/jobs');
+        const data = await response.json();
+        setJobs(data);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchJobs();
+  }, []);
+
+
+  const features = [
+    {
+      icon: <Star className="h-8 w-8 text-blue-500" />,
+      title: "Blockchain Reputation",
+      description: "Immutable reputation system built on blockchain technology"
+    },
+    {
+      icon: <Zap className="h-8 w-8 text-blue-500" />,
+      title: "Real-Time Updates",
+      description: "Track project progress and communicate in real-time"
+    }
+  ];
 
   const LandingPage = () => (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -99,15 +110,15 @@ const WorkSphereFrontend = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div>
-              <div className="text-4xl font-bold mb-2">10,000+</div>
+              <div className="text-4xl font-bold mb-2"></div>
               <div className="text-blue-200">Active Freelancers</div>
-            </div>
+            </div> 
             <div>
-              <div className="text-4xl font-bold mb-2">5,000+</div>
+              <div className="text-4xl font-bold mb-2"></div>
               <div className="text-blue-200">Completed Projects</div>
             </div>
             <div>
-              <div className="text-4xl font-bold mb-2">$2M+</div>
+              <div className="text-4xl font-bold mb-2"></div>
               <div className="text-blue-200">Value Exchanged</div>
             </div>
           </div>
@@ -116,63 +127,6 @@ const WorkSphereFrontend = () => {
     </div>
   );
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    const email = e.target.email.value;
-    const password = e.target.password.value;
-    const username = authMode ==='register'? e.target.username?.value : undefined;
-    const role = authMode ==='register'? e.target.role?.value : undefined;
-
-    try {
-      const response = await fetch(`http://localhost:5000/${authMode}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, username, role }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setIsAuthenticated(true);
-        setShowAuthModal(false);
-        setAuthError('');
-        setIsLandingPage(false);
-        setUserRole(data.role);
-        console.log(data.message); // Success message
-      } else {
-        setAuthError(data.message); // Error message from backend
-      }
-    } catch (error) {
-      setAuthError('An error occurred. Please try again.');
-    }
-  };
-
-  const handlePostJob = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch('http://localhost:5000/jobs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: jobTitle, budget: jobBudget, description: jobDescription }),
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        setJobs([...jobs, data.job]);
-        setJobTitle('');
-        setJobBudget('');
-        setJobDescription('');
-      } else {
-        console.error(data.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   const AuthModal = () => {
     const [username, setUsername] = useState('');
@@ -285,7 +239,7 @@ const WorkSphereFrontend = () => {
                 className="text-sm text-blue-600 hover:underline"
               >
                 {authMode === 'login' 
-              ? "Don't have an account? Register" 
+             ? "Don't have an account? Register" 
                   : "Already have an account? Login"}
               </button>
             </div>
@@ -294,13 +248,57 @@ const WorkSphereFrontend = () => {
       </div>
     );
   };
+  const JobDetails = ({ job }) => {
+  return (
+    <div>
+      <h2>{job.title}</h2>
+      <p><strong>Budget:</strong> {job.budget}</p>
+      <p><strong>Description:</strong> {job.description}</p>
+      <p><strong>Milestones:</strong></p>
+      <ul>
+        {job.milestones.map((milestone, index) => (
+          <li key={index}>{milestone}</li>
+        ))}
+      </ul>
+      <p><strong>Posted by:</strong> {job.postedBy}</p>
+      <button className="bg-blue-600 text-white px-4 py-2 rounded-lg">Apply</button>
+    </div>
+  );
+};
 
+const ClientDashboard = () => {
+  const [applicants, setApplicants] = useState([]);
+
+  const fetchApplicants = async (jobId) => {
+    const response = await fetch(`http://localhost:5000/jobs/${jobId}/applicants`);
+    const data = await response.json();
+    setApplicants(data);
+  };
+
+  return (
+    <div>
+      <h1>Client Dashboard</h1>
+      {jobs.map((job) => (
+        <div key={job.id}>
+          <h2>{job.title}</h2>
+          <button onClick={() => fetchApplicants(job.id)}>View Applicants</button>
+        </div>
+      ))}
+      {applicants.length > 0 && (
+        <div>
+          <h3>Applicants:</h3>
+          <ul>
+            {applicants.map((applicant) => (
+              <li key={applicant.id}>{applicant.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+  
  const MainApp = () => {
-  const [jobTitle, setJobTitle] = useState('');
-  const [jobBudget, setJobBudget] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
-  const [jobs, setJobs] = useState([]);
-
   useEffect(() => {
     const fetchJobs = async () => {
       try {
@@ -331,6 +329,7 @@ const WorkSphereFrontend = () => {
         setJobTitle('');
         setJobBudget('');
         setJobDescription('');
+        setShowPostJobForm(false);
       } else {
         console.error(data.error);
       }
@@ -379,7 +378,10 @@ const WorkSphereFrontend = () => {
               <button className="flex items-center gap-2 px-6 py-3 border-2 rounded-lg hover:bg-gray-50">
                 Browse Jobs
               </button>
-              <button className="flex items-center gap-2 px-6 py-3 border-2 rounded-lg hover:bg-gray-50">
+              <button 
+                className="flex items-center gap-2 px-6 py-3 border-2 rounded-lg hover:bg-gray-50"
+                onClick={() => setShowPostJobForm(true)}
+              >
                 Post a Job
               </button>
               <button className="flex items-center gap-2 px-6 py-3 border-2 rounded-lg hover:bg-gray-50">
@@ -390,46 +392,55 @@ const WorkSphereFrontend = () => {
               </button>
             </div>
 
-            <form onSubmit={handlePostJob} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Job Title</label>
-                <input
-                  type="text"
-                  value={jobTitle}
-                  onChange={(e) => setJobTitle(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  placeholder="Enter job title"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Job Budget</label>
-                <input
-                  type="text"
-                  value={jobBudget}
-                  onChange={(e) => setJobBudget(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  placeholder="Enter job budget"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Job Description</label>
-                <textarea
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  placeholder="Enter job description"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Post Job
-              </button>
-            </form>
+            {showPostJobForm && (
+              <form onSubmit={handlePostJob} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Job Title</label>
+                  <input
+                    type="text"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg"
+                    placeholder="Enter job title"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Job Budget</label>
+                  <input
+                    type="text"
+                    value={jobBudget}
+                    onChange={(e) => setJobBudget(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg"
+                    placeholder="Enter job budget"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Job Description</label>
+                  <textarea
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg"
+                    placeholder="Enter job description"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Post Job
+                </button>
+                <button 
+                  type="button"
+                  className="w-full px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-700"
+                  onClick={() => setShowPostJobForm(false)}
+                >
+                  Cancel
+                </button>
+              </form>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
               {jobs.map((job) => (
@@ -445,15 +456,20 @@ const WorkSphereFrontend = () => {
                     <span className="text-sm text-gray-500">
                       Status: {job.status}
                     </span>
-                    {job.status === 'Open'? (
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        Apply Now
-                      </button>
-                    ) : (
-                      <button className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg">
-                        Applied
-                      </button>
-                    )}
+                    {jobs.map((job) => (
+  job.status === 'Open' ? (
+    <button
+      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+      onClick={() => setSelectedJob(job)}
+    >
+      Apply Now
+    </button>
+  ) : (
+    <button className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg">Applied</button>
+  )
+))}
+
+{selectedJob && <JobDetails job={selectedJob} />}
                   </div>
                 </div>
               ))}

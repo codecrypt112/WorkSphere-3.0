@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { ethers } from "ethers";
-import WorkSphereFrontend from "./components/WorkSphereFrontend";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
+import MetaMaskAuth from "./components/MetaMaskAuth";
 
 const App = () => {
- 
   return (
-    <>
-      <div>
-          <WorkSphereFrontend />
-        </div>
-    </>
+    <Router>
+      <Routes>
+        <Route path="/" element={<MetaMaskAuth />} />
+      </Routes>
+    </Router>
   );
 };
 
