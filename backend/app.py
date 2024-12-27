@@ -352,6 +352,28 @@ def get_ongoing_projects(wallet_address):
             "details": str(e)
         }), 500
 
+@app.route('/api/jobs/<job_id>/applications', methods=['GET'])
+def get_job_applications(job_id):
+    try:
+        # Find all applications for the given job
+        applications = list(applications_collection.find({
+            'jobId': ObjectId(job_id)
+        }))
+        
+        # Convert ObjectIds to strings
+        for application in applications:
+            application['_id'] = str(application['_id'])
+            application['jobId'] = str(application['jobId'])
+        
+        return jsonify(applications), 200
+
+    except Exception as e:
+        print("Error fetching job applications:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
