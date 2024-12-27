@@ -114,34 +114,38 @@ const WorkSphereFrontend = () => {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    const email = e.target.email.value;
-    const password = e.target.password.value;
-    const username = authMode === 'register' ? e.target.username?.value : undefined;
+    const endpoint = authMode === 'login' ? '/login' : '/signup';
+    const url = `https://obscure-space-couscous-x4wg5jrp764f555-5000.app.github.dev${endpoint}`; // Update if running Flask elsewhere
+  
+    const payload = {
+      email: e.target.email.value,
+      password: e.target.password.value,
+    };
+    if (authMode === 'register') {
+      payload.username = e.target.username?.value;
+    }
   
     try {
-      const response = await fetch(`https://obscure-space-couscous-x4wg5jrp764f555-5000.app.github.dev/${authMode}`, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, ...(username && { username }) }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
   
       const data = await response.json();
-  
       if (response.ok) {
         setIsAuthenticated(true);
         setShowAuthModal(false);
         setAuthError('');
         setIsLandingPage(false);
-        console.log(data.message); // Success message
       } else {
-        setAuthError(data.message); // Error message from backend
+        setAuthError(data.error || 'Authentication failed. Please try again.');
       }
     } catch (error) {
-      setAuthError('An error occurred. Please try again.');
+      setAuthError('Network error. Please check your connection.');
     }
   };
+  
 
   const AuthModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

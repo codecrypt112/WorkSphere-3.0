@@ -8,12 +8,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://obscure-space-couscous-x4wg5jrp764f555-5173.app.github.dev"}})
+CORS(app)  # Allow all origins for GitHub Codespaces
 
 # MongoDB setup
 MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your MongoDB URI
 client = MongoClient(MONGO_URI)
-db = client["worksphere"]
+db = client["websphere3"]
 job_collection = db["jobs"]
 
 # Infura setup
@@ -104,46 +104,33 @@ def update_job(title):
 
     return jsonify({"message": "Job updated successfully"}), 200
 
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-
-    if not email or not password:
-        return jsonify({'message': 'Missing fields'}), 400
-
-    user = users_collection.find_one({"email": email})
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'message': 'Invalid credentials'}), 401
-
-    return jsonify({'message': 'User registered successfully'}), 201
-
-db = client["worksphere"]
-users_collection = db["users"]
+users_collection = db['users']
 
 @app.route('/signup', methods=['POST'])
 def signup():
-    data = request.json
-    email = data.get('email')
+    data = request.get_json()
+    email = data['email']
     username = data.get('username')
-    password = data.get('password')
+    password = data['password']
 
-    if not email or not username or not password:
-        return jsonify({'message': 'Missing fields'}), 400
-
-    if users_collection.find_one({"email": email}):
-        return jsonify({'message': 'Email already registered'}), 400
+    if users_collection.find_one({'email': email}):
+        return jsonify({'error': 'Email already exists'}), 409
 
     hashed_password = generate_password_hash(password)
-    users_collection.insert_one({
-        "email": email,
-        "username": username,
-        "password": hashed_password
-    })
+    users_collection.insert_one({'email': email, 'username': username, 'password': hashed_password})
+    return jsonify({'message': 'Signup successful'}), 201
 
-    return jsonify({'message': 'User registered successfully'}), 201
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data['email']
+    password = data['password']
+
+    user = users_collection.find_one({'email': email})
+    if user and check_password_hash(user['password'], password):
+        return jsonify({'message': 'Login successful', 'user': {'email': user['email'], 'username': user.get('username')}}), 200
+    return jsonify({'error': 'Invalid credentials'}), 401
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
