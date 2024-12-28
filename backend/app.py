@@ -13,8 +13,8 @@ import re  # Add regex for wallet address validation
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
-
+#CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)
 # MongoDB Connection
 MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority"
 try:
@@ -22,7 +22,7 @@ try:
     db = client.freelance_platform
     jobs_collection = db.jobs
     applications_collection = db.job_applications
-    
+    ongoing_projects_collection = db.ongoing_projects 
     # Test connection
     client.admin.command('ismaster')
     print("MongoDB connection successful!")
@@ -235,37 +235,6 @@ def submit_job_application():
             "details": str(e)
         }), 500
 
-@app.route('/api/jobs/applications/<application_id>/<action>', methods=['POST'])
-def handle_application_action(application_id, action):
-    try:
-        # Validate action
-        if action not in ['approve', 'reject']:
-            return jsonify({"error": "Invalid action"}), 400
-        
-        # Update application status
-        result = applications_collection.update_one(
-            {'_id': ObjectId(application_id)},
-            {'$set': {'status': action}}
-        )
-        
-        if result.modified_count == 0:
-            return jsonify({"error": "Application not found"}), 404
-        
-        # If approved, you might want to add additional logic here
-        # For example, updating job status or creating a contract
-        
-        return jsonify({
-            "message": f"Application {action}d successfully",
-            "status": action
-        }), 200
-
-    except Exception as e:
-        print(f"Error {action}ing application:")
-        traceback.print_exc()
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
 
 @app.route('/api/jobs/applied/<wallet_address>', methods=['GET'])
 def get_applied_jobs(wallet_address):
@@ -359,10 +328,10 @@ def get_created_jobs(wallet_address):
 @app.route('/api/projects/ongoing/<wallet_address>', methods=['GET'])
 def get_ongoing_projects(wallet_address):
     try:
-        # Find applications that were approved for this wallet
-        ongoing_projects = list(applications_collection.find({
+        # Find ongoing projects for the user
+        ongoing_projects = list(ongoing_projects_collection.find({
             'applicantWallet': wallet_address,
-            'status': 'approved'
+            'status': 'ongoing'
         }))
         
         # Fetch corresponding jobs with additional details
@@ -375,9 +344,10 @@ def get_ongoing_projects(wallet_address):
                     'title': job.get('title', ''),
                     'description': job.get('description', ''),
                     'creatorWallet': job.get('creatorWallet', ''),
+                    'milestones': project.get('milestones', []),
                     'applicationDetails': {
                         'status': project['status'],
-                        'appliedAt': project['appliedAt'],
+                        'startedAt': project['startedAt'],
                         'expectedBudget': project.get('expectedBudget', ''),
                         'estimatedTime': project.get('estimatedTime', '')
                     }
@@ -394,12 +364,177 @@ def get_ongoing_projects(wallet_address):
             "details": str(e)
         }), 500
 
+@app.route('/api/jobs/applications/<application_id>/confirm', methods=['POST'])
+def confirm_application(application_id):
+    try:
+        # Get the milestones from the request
+        milestones = request.json.get('milestones', [])
+        if not milestones:
+            return jsonify({"error": "Milestones are required"}), 400
+        
+        # Validate application exists
+        application = applications_collection.find_one({'_id': ObjectId(application_id)})
+        if not application:
+            return jsonify({"error": "Application not found"}), 404
+        
+        # Update the application status
+        result = applications_collection.update_one(
+            {'_id': ObjectId(application_id)},
+            {'$set': {
+                'status': 'approved',
+                'milestones': milestones
+            }}
+        )
+        
+        # Create ongoing project
+        ongoing_project = {
+            'jobId': application['jobId'],
+            'applicantWallet': application['applicantWallet'],
+            'creatorWallet': application.get('creatorWallet', ''),
+            'milestones': milestones,
+            'status': 'ongoing',
+            'startedAt': datetime.utcnow(),
+            'expectedBudget': application.get('expectedBudget', ''),
+            'estimatedTime': application.get('estimatedTime', '')
+        }
+        
+        # Insert ongoing project
+        ongoing_projects_collection.insert_one(ongoing_project)
+
+        return jsonify({
+            "message": "Application confirmed and project created successfully",
+            "status": "approved"
+        }), 200
+
+    except Exception as e:
+        print("Error confirming application:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+@app.route('/api/jobs/applications/<application_id>/approve', methods=['POST'])
+def approve_application(application_id):
+  try:
+    # Get the milestones from the request
+    milestones = request.json.get('milestones', [])
+    if not milestones:
+      return jsonify({"error": "Milestones are required when approving an application"}), 400
+    
+    # Update application status
+    result = applications_collection.update_one(
+      {'_id': ObjectId(application_id)},
+      {'$set': {'status': 'approved'}}
+    )
+    
+    if result.modified_count == 0:
+      return jsonify({"error": "Application not found"}), 404
+    
+    # Create a new ongoing project entry
+    application = applications_collection.find_one({'_id': ObjectId(application_id)})
+    if not application:
+      return jsonify({"error": "Application not found"}), 404
+    
+    ongoing_project = {
+      'jobId': application['jobId'],
+      'applicantWallet': application['applicantWallet'],
+      'creatorWallet': application.get('creatorWallet', ''),  # Assuming you have this in the application
+      'milestones': milestones,
+      'status': 'ongoing',
+      'startedAt': datetime.utcnow(),
+      'expectedBudget': application.get('expectedBudget', ''),
+      'estimatedTime': application.get('estimatedTime', '')
+    }
+    
+    # Insert ongoing project into the new collection
+    ongoing_projects_collection.insert_one(ongoing_project)
+
+    return jsonify({
+      "message": "Application approved successfully",
+      "status": "approved"
+    }), 200
+
+  except Exception as e:
+    print("Error approving application:")
+    traceback.print_exc()
+    return jsonify({
+      "error": "Internal server error",
+      "details": str(e)
+    }), 500
+
+@app.route('/api/jobs/applications/<application_id>/<action>', methods=['POST'])
+def handle_application_action(application_id, action):
+    try:
+        # Validate action
+        if action not in ['approve', 'reject']:
+            return jsonify({"error": "Invalid action"}), 400
+        
+        # Update application status
+        result = applications_collection.update_one(
+            {'_id': ObjectId(application_id)},
+            {'$set': {'status': action}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Application not found"}), 404
+        
+        if action == 'approve':
+            # Handle approval logic...
+            pass
+
+        return jsonify({
+            "message": f"Application {action}d successfully",
+            "status": action
+        }), 200
+
+    except Exception as e:
+        print(f"Error {action}ing application:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+    
+@app.route('/api/jobs/applications/<application_id>/reject', methods=['POST'])
+def reject_application(application_id):
+    try:
+        # Find the application first to get the job ID
+        application = applications_collection.find_one({'_id': ObjectId(application_id)})
+        
+        if not application:
+            return jsonify({"error": "Application not found"}), 404
+            
+        # Update application status to rejected
+        result = applications_collection.update_one(
+            {'_id': ObjectId(application_id)},
+            {'$set': {
+                'status': 'rejected',
+                'rejectedAt': datetime.utcnow()
+            }}
+        )
+        
+        return jsonify({
+            "message": "Application rejected successfully",
+            "status": "rejected",
+            "jobId": str(application['jobId'])
+        }), 200
+
+    except Exception as e:
+        print("Error rejecting application:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+    
 @app.route('/api/jobs/<job_id>/applications', methods=['GET'])
 def get_job_applications(job_id):
     try:
-        # Find all applications for the given job
+        # Find all non-rejected applications for the given job
         applications = list(applications_collection.find({
-            'jobId': ObjectId(job_id)
+            'jobId': ObjectId(job_id),
+            'status': {'$ne': 'rejected'}  # Exclude rejected applications
         }))
         
         # Enrich applications with additional details

@@ -54,91 +54,248 @@ const MyJobs = ({ account }) => {
     );
   };
 
-  const ApplicationModal = ({ job, onClose }) => {
-    const [applications, setApplications] = useState([]);
-    const [modalLoading, setModalLoading] = useState(true);
+ const ApplicationModal = ({ job, onClose, fetchMyJobs }) => {
+  const [applications, setApplications] = useState([]);
+  const [modalLoading, setModalLoading] = useState(true);
+  const [milestones, setMilestones] = useState([{ 
+    title: '', 
+    description: '', 
+    deadline: new Date().toISOString().split('T')[0] // Initialize with today's date
+  }]);
+  const [confirmationRequired, setConfirmationRequired] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [rejectConfirmation, setRejectConfirmation] = useState(false); // State for rejection confirmation
 
-    const fetchApplications = async () => {
-      try {
-        const response = await axios.get(`http://localhost:5000/api/jobs/${job._id}/applications`);
-        setApplications(response.data);
-        setModalLoading(false);
-      } catch (err) {
-        console.error('Error fetching applications:', err);
-        setModalLoading(false);
-      }
-    };
-
-    useEffect(() => {
-      fetchApplications();
-    }, [job._id]);
-
-    const handleApplicationAction = async (applicationId, action) => {
-      try {
-        await axios.post(`http://localhost:5000/api/jobs/applications/${applicationId}/${action}`);
-        await fetchApplications();
-        await fetchMyJobs(); // Refresh all jobs to update status
-      } catch (err) {
-        console.error(`Error ${action}ing application:`, err);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-8 relative max-h-[80vh] overflow-y-auto">
-          <button onClick={onClose} className="absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-
-          <h2 className="text-2xl font-bold mb-6">Applications for {job.title}</h2>
-
-          {modalLoading ? (
-            <div className="text-center">Loading applications...</div>
-          ) : applications.length === 0 ? (
-            <div className="text-center text-gray-500">No applications yet</div>
-          ) : (
-            <div className="space-y-4">
-              {applications.map((application) => (
-                <div key={application._id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold">{application.applicantWallet}</h3>
-                      <p className="text-sm mt-1">{application.coverLetter}</p>
-                      {application.expectedBudget && (
-                        <p className="text-sm mt-1">Expected Budget: ${application.expectedBudget}</p>
-                      )}
-                      {application.estimatedTime && (
-                        <p className="text-sm">Estimated Time: {application.estimatedTime}</p>
-                      )}
-                    </div>
-                    {renderApplicationStatus(application.status)}
-                  </div>
-                  {application.status === 'pending' && (
-                    <div className="flex gap-2 mt-2">
-                      <button 
-                        onClick={() => handleApplicationAction(application._id, 'approve')}
-                        className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
-                      >
-                        Approve
-                      </button>
-                      <button 
-                        onClick={() => handleApplicationAction(application._id, 'reject')}
-                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+const fetchApplications = async () => {
+  try {
+    const response = await axios.get(`http://localhost:5000/api/jobs/${job._id}/applications`);
+    
+    // Filter out rejected applications
+    const activeApplications = response.data.filter(
+      application => application.status !== 'rejected'
     );
+    
+    setApplications(activeApplications);
+    setModalLoading(false);
+  } catch (err) {
+    console.error('Error fetching applications:', err);
+    setModalLoading(false);
+  }
+};
+
+  useEffect(() => {
+    fetchApplications();
+  }, [job._id]);
+
+  const handleApplicationAction = async (applicationId, action) => {
+    try {
+      if (action === 'approve') {
+        setSelectedApplication(applicationId);
+        setConfirmationRequired(true);
+      } else if (action === 'reject') {
+        setSelectedApplication(applicationId);
+        setRejectConfirmation(true); // Show rejection confirmation
+      }
+    } catch (err) {
+      console.error(`Error ${action}ing application:`, err);
+    }
   };
+
+ const confirmRejection = async () => {
+  if (!selectedApplication) return;
+
+  try {
+    const response = await axios.post(`http://localhost:5000/api/jobs/applications/${selectedApplication}/reject`);
+    
+    // Update the local state to remove the rejected application
+    const updatedApplications = applications.filter(app => 
+      app._id !== selectedApplication && app.status !== 'rejected'
+    );
+    
+    setApplications(updatedApplications);
+    setRejectConfirmation(false);
+    setSelectedApplication(null);
+
+    // Refetch applications to ensure consistency
+    await fetchApplications();
+
+    // If no more applications, close the modal
+    if (updatedApplications.length === 0) {
+      onClose();
+    }
+  } catch (err) {
+    console.error('Error rejecting application:', err);
+  }
+};
+
+  const cancelRejection = () => {
+    setRejectConfirmation(false); // Close rejection confirmation dialog
+  };
+
+  const confirmMilestones = async () => {
+    if (!selectedApplication) return;
+    
+    try {
+      await axios.post(`http://localhost:5000/api/jobs/applications/${selectedApplication}/confirm`, {
+        milestones: milestones
+      });
+      
+      await fetchMyJobs(); // Now this will work because fetchMyJobs is passed as a prop
+      await fetchApplications();
+      setConfirmationRequired(false);
+      onClose();
+    } catch (err) {
+      console.error('Error confirming milestones:', err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-8 relative max-h-[80vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-600 hover:text-gray-900">
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 className="text-2xl font-bold mb-6">Applications for {job.title}</h2>
+
+        {modalLoading ? (
+          <div className="text-center">Loading applications...</div>
+        ) : applications.length === 0 ? (
+          <div className="text-center text-gray-500">No applications yet</div>
+        ) : (
+          <div className="space-y-4">
+            {applications.map((application) => (
+              <div key={application._id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className=" font-semibold">{application.applicantWallet}</h3>
+                    <p className="text-sm mt-1">{application.coverLetter}</p>
+                    {application.expectedBudget && (
+                      <p className="text-sm mt-1">Expected Budget: ${application.expectedBudget}</p>
+                    )}
+                    {application.estimatedTime && (
+                      <p className="text-sm">Estimated Time: {application.estimatedTime}</p>
+                    )}
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => handleApplicationAction(application._id, 'approve')}
+                      className="bg-blue-500 text-white px-4 py-2 rounded"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleApplicationAction(application._id, 'reject')}
+                      className="bg-red-500 text-white px-4 py-2 rounded ml-2"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {confirmationRequired && (
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold">Confirm Milestones</h3>
+            {milestones.map((milestone, index) => (
+              <div key={index} className="flex flex-col mb-4">
+                <input
+                  type="text"
+                  placeholder="Milestone Title"
+                  value={milestone.title}
+                  onChange={(e) => {
+                    const newMilestones = [...milestones];
+                    newMilestones[index].title = e.target.value;
+                    setMilestones(newMilestones);
+                  }}
+                  className="border rounded p-2 mb-2"
+                />
+                <textarea
+                  placeholder="Milestone Description"
+                  value={milestone.description}
+                  onChange={(e) => {
+                    const newMilestones = [...milestones];
+                    newMilestones[index].description = e.target.value;
+                    setMilestones(newMilestones);
+                  }}
+                  className="border rounded p-2 mb-2"
+                />
+                <input
+                  type="date"
+                  value={milestone.deadline}
+                  onChange={(e) => {
+                    const newMilestones = [...milestones];
+                    newMilestones[index].deadline = e.target.value;
+                    setMilestones(newMilestones);
+                  }}
+                  className="border rounded p-2"
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => setMilestones([...milestones, { 
+                title: '', 
+                description: '', 
+                deadline: new Date().toISOString().split('T')[0]
+              }])}
+              className="bg-green-200 text-green-800 px-4 py-2 rounded mb-4"
+            >
+              Add Another Milestone
+            </button>
+            {milestones.length > 1 && (
+              <div className="mb-4">
+                {milestones.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      const newMilestones = milestones.filter((_, i) => i !== index);
+                      setMilestones(newMilestones);
+                    }}
+                    className="bg-red-200 text-red-800 px-4 py-2 rounded mr-2"
+                  >
+                    Remove Milestone {index + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={confirmMilestones}
+              className="bg-green-500 text-white px-4 py-2 rounded mt-4"
+            >
+              Confirm Milestones
+            </button>
+          </div>
+        )}
+
+        {rejectConfirmation && (
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold">Confirm Rejection</h3>
+            <p>Are you sure you want to reject this application?</p>
+            <div className="mt-4">
+              <button
+                onClick={confirmRejection}
+                className="bg-red-500 text-white px-4 py-2 rounded mr-2"
+              >
+                Yes, Reject
+              </button>
+              <button
+                onClick={cancelRejection}
+                className="bg-gray-300 text-gray-800 px-4 py-2 rounded"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -208,7 +365,11 @@ const MyJobs = ({ account }) => {
       )}
 
       {selectedJob && (
-        <ApplicationModal job={selectedJob} onClose={() => setSelectedJob(null)} />
+        <ApplicationModal 
+          job={selectedJob} 
+          onClose={() => setSelectedJob(null)} 
+          fetchMyJobs={fetchMyJobs} 
+        />
       )}
     </div>
   );
