@@ -6,7 +6,8 @@ const MyJobs = ({ account }) => {
   const [myJobs, setMyJobs] = useState({
     created: [],
     applied: [],
-    ongoingProjects: []
+    ongoingProjects: [],
+    approvedProjects: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,10 +28,16 @@ const fetchMyJobs = async () => {
         }
 
         // Use Promise.all to fetch data concurrently
-        const [createdJobsResponse, appliedJobsResponse, ongoingProjectsResponse] = await Promise.all([
+        const [
+            createdJobsResponse, 
+            appliedJobsResponse, 
+            ongoingProjectsResponse,
+            approvedProjectsResponse  // Add this line
+        ] = await Promise.all([
             axios.get(`http://localhost:5000/api/jobs/created/${account}`),
             axios.get(`http://localhost:5000/api/jobs/applied/${account}`),
-            axios.get(`http://localhost:5000/api/projects/ongoing/${account}`)
+            axios.get(`http://localhost:5000/api/projects/ongoing/${account}`),
+            axios.get(`http://localhost:5000/api/projects/approved/${account}`)  // Add this line
         ]);
 
         // Normalize project IDs and fetch milestones
@@ -68,9 +75,10 @@ const fetchMyJobs = async () => {
         setMyJobs({
             created: createdJobsResponse.data,
             applied: appliedJobsResponse.data,
-            ongoingProjects: ongoingProjects
+            ongoingProjects: ongoingProjects,
+            approvedProjects: approvedProjectsResponse.data  // Add this line
         });
-        
+      
         setError(null); // Clear any previous errors
     } catch (error) {
         console.error("Error fetching jobs:", error);
@@ -720,94 +728,129 @@ const renderMilestones = (project, account) => {
     );
   };
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-4">My Jobs</h2>
-      <div className="flex mb-4">
-        <button onClick={() => setActiveTab('created')}
-          className={`flex-1 py-2 text-center ${activeTab === 'created' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          Created Jobs
-        </button>
-        <button 
-          onClick={() => setActiveTab('applied')}
-          className={`flex-1 py-2 text-center ${activeTab === 'applied' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          Applied Jobs
-        </button>
-        <button 
-          onClick={() => setActiveTab('ongoing')}
-          className={`flex-1 py-2 text-center ${activeTab === 'ongoing' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          Ongoing Projects
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="text-center">Loading jobs...</div>
-      ) : (
-        <div>
-          {activeTab === 'created' && myJobs.created.length > 0 ? (
-            myJobs.created.map((job) => (
-              <div key={job._id} className="border rounded-lg p-4 mb-4">
-                <h3 className="font-semibold">{job.title}</h3>
-                <p className="text-sm">{job.description}</p>
-                <button 
-                  onClick={() => setSelectedJob(job)}
-                  className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
-                >
-                  View Applications
-                </button>
-              </div>
-            ))
-          ) : activeTab === 'applied' && myJobs.applied.length > 0 ? (
-            myJobs.applied.map((job) => (
-              <div key={job._id} className="border rounded-lg p-4 mb-4">
-                <h3 className="font-semibold">{job.title}</h3>
-                <p className="text-sm">Application Status: {renderApplicationStatus(job.applicationStatus)}</p>
-              </div>
-            ))
-          ) : activeTab === 'ongoing' && myJobs.ongoingProjects.length > 0 ? (
-              myJobs.ongoingProjects.map((project, index) => (
-          <div 
-            key={`${project._id}-${index}`}  
-            className="border rounded-lg p-4 mb-4"
-          >
-            <h3 className="font-semibold">{project.title}</h3>
-            <p className="text-sm">{project.description}</p>
-            <div className="mt-2">
-              <p className="text-sm font-medium">Client: {project.creatorWallet}</p>
-              <p className="text-sm">
-                Started: {project.applicationDetails?.appliedAt 
-                  ? new Date(project.applicationDetails.appliedAt).toLocaleDateString() 
-                  : 'N/A'}
-              </p>
-              <MilestoneRenderer 
-                project={project} 
-                account={account} 
-                toggleMilestoneStatus={toggleMilestoneStatus}
-                fetchMyJobs={fetchMyJobs}
-              />
-            </div>
-          </div>
-              ))
-          ) : (
-            <div className="text-center text-gray-500">
-              No {activeTab === 'ongoing' ? 'ongoing projects' : `${activeTab} jobs`} yet
-            </div>
-          )}
-        </div>
-      )}
-
-      {selectedJob && (
-        <ApplicationModal 
-          job={selectedJob} 
-          onClose={() => setSelectedJob(null)} 
-          fetchMyJobs={fetchMyJobs} 
-        />
-      )}
+return (
+  <div className="bg-white p-6 rounded-lg shadow-md">
+    <h2 className="text-2xl font-bold mb-4">My Jobs</h2>
+    <div className="flex mb-4">
+      <button 
+        onClick={() => setActiveTab('created')}
+        className={`flex-1 py-2 text-center ${activeTab === 'created' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+      >
+        Created Jobs
+      </button>
+      <button 
+        onClick={() => setActiveTab('applied')}
+        className={`flex-1 py-2 text-center ${activeTab === 'applied' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+      >
+        Applied Jobs
+      </button>
+      <button 
+        onClick={() => setActiveTab('ongoing')}
+        className={`flex-1 py-2 text-center ${activeTab === 'ongoing' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+      >
+        Ongoing Projects
+      </button>
+      <button 
+        onClick={() => setActiveTab('approved')}
+        className={`flex-1 py-2 text-center ${activeTab === 'approved' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+      >
+        Approved Jobs
+      </button>
     </div>
-  );
+
+    {loading ? (
+      <div className="text-center">Loading jobs...</div>
+    ) : (
+      <div>
+        {activeTab === 'created' && myJobs.created.length > 0 ? (
+          myJobs.created.map((job) => (
+            <div key={job._id} className="border rounded-lg p-4 mb-4">
+              <h3 className="font-semibold">{job.title}</h3>
+              <p className="text-sm">{job.description}</p>
+              <button 
+                onClick={() => setSelectedJob(job)}
+                className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
+              >
+                View Applications
+              </button>
+            </div>
+          ))
+        ) : activeTab === 'applied' && myJobs.applied.length > 0 ? (
+          myJobs.applied.map((job) => (
+            <div key={job._id} className="border rounded-lg p-4 mb-4">
+              <h3 className="font-semibold">{job.title}</h3>
+              <p className="text-sm">Application Status: {renderApplicationStatus(job.applicationStatus)}</p>
+            </div>
+          ))
+        ) : activeTab === 'ongoing' && myJobs.ongoingProjects.length > 0 ? (
+          myJobs.ongoingProjects.map((project, index) => (
+            <div 
+              key={`${project._id}-${index}`}  
+              className="border rounded-lg p-4 mb-4"
+            >
+              <h3 className="font-semibold">{project.title}</h3>
+              <p className="text-sm">{project.description}</p>
+              <div className="mt-2">
+                <p className="text-sm font-medium">Client: {project.creatorWallet}</p>
+                <p className="text-sm">
+                  Started: {project.applicationDetails?.appliedAt 
+                    ? new Date(project.applicationDetails.appliedAt).toLocaleDateString() 
+                    : 'N/A'}
+                </p>
+                <MilestoneRenderer 
+                  project={project} 
+                  account={account} 
+                  toggleMilestoneStatus={toggleMilestoneStatus}
+                  fetchMyJobs={fetchMyJobs}
+                />
+              </div>
+            </div>
+          ))
+        ) : activeTab === 'approved' && myJobs.approvedProjects.length > 0 ? (
+          myJobs.approvedProjects.map((project) => (
+            <div key={project._id} className="border rounded-lg p-4 mb-4">
+              <h3 className="font-semibold">{project.title}</h3>
+              <p className="text-sm">{project.description}</p>
+              <div className="mt-2">
+                <p className="text-sm font-medium">Applicant: {project.applicantWallet}</p>
+                <p className="text-sm">
+                  Started: {project.startedAt 
+                    ? new Date(project.startedAt).toLocaleDateString() 
+                    : 'N/A'}
+                </p>
+                <div className="mt-2">
+                  <h4 className="font-medium text-sm mb-2">Project Details</h4>
+                  <p className="text-xs">Expected Budget: {project.expectedBudget || 'N/A'}</p>
+                  <p className="text-xs">Estimated Time: {project.estimatedTime || 'N/A'}</p>
+                </div>
+                <MilestoneRenderer 
+                  project={project} 
+                  account={account} 
+                  toggleMilestoneStatus={toggleMilestoneStatus}
+                  fetchMyJobs={fetchMyJobs}
+                />
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500">
+            No {activeTab === 'ongoing' ? 'ongoing projects' : 
+                activeTab === 'approved' ? 'approved jobs' : 
+                `${activeTab} jobs`} yet
+          </div>
+        )}
+      </div>
+    )}
+
+    {selectedJob && (
+      <ApplicationModal 
+        job={selectedJob} 
+        onClose={() => setSelectedJob(null)} 
+        fetchMyJobs={fetchMyJobs} 
+      />
+    )}
+  </div>
+);
 };
 
 export default MyJobs;

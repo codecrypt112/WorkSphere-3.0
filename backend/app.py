@@ -887,6 +887,44 @@ def get_ongoing_projects(wallet_address):
             "error": "Internal server error", 
             "details": str(e)
         }), 500
+
+@app.route('/api/projects/approved/<wallet_address>', methods=['GET'])
+def get_approved_projects(wallet_address):
+    try:
+        # Find approved projects where the user is the creator
+        approved_projects = list(ongoing_projects_collection.find({
+            'creatorWallet': wallet_address,
+            'status': {'$in': ['ongoing', 'submitted']}
+        }))
+        
+        # Enrich projects with job details
+        projects = []
+        for project in approved_projects:
+            job = jobs_collection.find_one({'_id': project['jobId']})
+            if job:
+                project_details = {
+                    '_id': str(project['_id']),
+                    'title': job.get('title', ''),
+                    'description': job.get('description', ''),
+                    'applicantWallet': project.get('applicantWallet', ''),
+                    'milestones': project.get('milestones', []),
+                    'status': project.get('status', 'ongoing'),
+                    'submissionLink': project.get('submissionLink'),
+                    'startedAt': project.get('startedAt'),
+                    'expectedBudget': project.get('expectedBudget', ''),
+                    'estimatedTime': project.get('estimatedTime', '')
+                }
+                projects.append(project_details)
+        
+        return jsonify(projects), 200
+
+    except Exception as e:
+        print("Error fetching approved projects:", e)
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error", 
+            "details": str(e)
+        }), 500
     
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
