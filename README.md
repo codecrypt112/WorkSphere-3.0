@@ -5,107 +5,101 @@
 
 **WorkSphere 3.0** is a decentralized freelancing platform that integrates **Web3 blockchain technology** to provide secure, transparent transactions and a reliable reputation system for freelancers and clients. By utilizing blockchain and modern technologies, WorkSphere aims to address the trust and transparency issues that exist in traditional freelancing platforms.
 
-## Features
-
-- **Decentralized Platform**: Powered by Web3 technology to eliminate intermediaries.
-- **Escrow Payments**: Secure and transparent escrow system ensures clients’ funds are only released when milestones are met.
-- **Tamper-Proof Reputation**: Blockchain-based feedback system guarantees authentic and immutable reviews and ratings.
-- **Global Access**: Scalable and decentralized, allowing freelancers and clients to collaborate from anywhere in the world.
-- **Job Tracking**: Real-time progress tracking with milestone-based payments and updates.
-
 ## Problem Statement
-
-The freelancing industry faces several challenges in current platforms:
-- Lack of transparency and trust in freelance transactions.
-- Insecure payment mechanisms that leave both freelancers and clients vulnerable.
-- Difficulty in verifying freelancer reputation and tracking work progress.
+Traditional freelancing platforms often face challenges such as high platform fees, lack of transparency in payment processing, and centralized control, which can lead to disputes and inefficiencies. Freelancers and clients often struggle with trust issues and ensuring secure, milestone-based payments.
 
 ## Solution
+The proposed freelancing platform leverages Web3 technology to provide a decentralized solution that ensures transparency, security, and efficiency. By integrating blockchain for milestone-based payments and IPFS/Skynet for decentralized file hosting, the platform eliminates intermediaries and provides a trustless environment for clients and freelancers. Key features include MetaMask wallet connectivity for secure transactions, milestone tracking, and decentralized file submissions.
 
-**WorkSphere 3.0** solves these problems by leveraging Web3 blockchain technology to:
-1. Enable secure, transparent, and decentralized payment transactions.
-2. Implement an escrow system that holds funds until job milestones are completed.
-3. Provide a decentralized reputation system using blockchain to guarantee accurate, tamper-proof feedback.
+
+## Features
+- **Job Creation**: Users can create jobs and define project milestones.
+- **Milestone-based Payments**: Fund the project in ETH via MetaMask. Payments are released as milestones are completed.
+- **Freelancer Application**: Freelancers can browse and apply for available jobs.
+- **Decentralized File Submission**: Freelancers submit completed work via IPFS or Skynet links.
+- **Secure Transactions**: Powered by blockchain for secure and transparent payments.
 
 ## Tech Stack
+### Frontend
+- **React.js**: For building the user interface.
+- **TailwindCSS**: For responsive and modern UI styling.
 
-- **Frontend**: React.js
-- **Backend**: Flask (Python)
-- **Database**: MongoDB
-- **Blockchain**: Web3 (using Ethereum or Polygon)
-- **Smart Contracts**: Solidity
-- **State Management**: Redux / Context API (for React)
+### Backend
+- **Flask**: For handling API requests and server-side logic.
+- **MongoDB**: As the database to store job and user information.
 
-## How It Works
+### Blockchain Integration
+- **MetaMask**: For wallet connectivity and ETH transactions.
+- **Smart Contracts**: To manage milestone payments securely.
 
-### 1. **User Registration and Authentication**
-   - Users (freelancers and clients) can sign up on the platform.
-   - Authentication is done through JWT tokens for secure login.
-
-### 2. **Job Posting and Application**
-   - Clients can post jobs with detailed requirements and deadlines.
-   - Freelancers can apply for jobs by submitting proposals and portfolios.
-
-### 3. **Escrow Payments**
-   - Once a freelancer is selected, the client funds the job into an escrow account.
-   - Payment is only released upon milestone completion, ensuring both parties' security.
-
-### 4. **Smart Contracts**
-   - The platform uses Ethereum or Polygon smart contracts to automate and validate transactions, ensuring trust in every step.
-
-### 5. **Reputation System**
-   - Blockchain-based reviews and ratings ensure that freelancer reputations are authentic and cannot be tampered with.
-   - Both clients and freelancers can leave feedback after each project.
+### File Storage
+- **IPFS/Skynet**: For decentralized file hosting.
 
 ## Installation
+### Prerequisites
+- **Node.js**: For running the frontend.
+- **Python**: For running the Flask backend.
+- **MetaMask**: Installed in your browser.
+- **MongoDB**: Running instance for the database.
 
-### 1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/WorkSphere-3.0.git
-cd WorkSphere-3.0
+### Setup Instructions
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/WorkSphere-3.0.git
+   cd WorkSphere-3.0/
+   ```
+
+2. Install backend dependencies:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+3. Install frontend dependencies:
+   ```bash
+   cd ../frontend
+   npm install
+   ```
+
+4. Start the backend server:
+   ```bash
+   cd ../backend
+   python3 app.py
+   ```
+
+5. Start the frontend server:
+   ```bash
+   cd ../frontend
+   npm run dev
+   ```
+
+6. Open the application in your browser at `http://localhost:5173`.
+
+## Usage
+1. Connect your wallet via MetaMask.
+2. Create a job by specifying details and project milestones.
+3. Fund the project milestones with ETH via MetaMask.
+4. Freelancers can browse available jobs and apply.
+5. Job creators can accept applications and assign tasks.
+6. Freelancers complete milestones and submit work via IPFS or Skynet links.
+7. Upon milestone completion, ETH is transferred to the freelancer.
+8. Final work is submitted upon project completion.
+
+## Folder Structure
 ```
-
-### 2. Install dependencies:
-- **Frontend**:
-```bash
-cd frontend
-npm install
-```
-- **Backend**:
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 3. Set up MongoDB:
-- Create a MongoDB database and configure the URI in the backend `.env` file.
-
-### 4. Deploy Smart Contracts:
-- Use **Hardhat** or **Remix** to deploy your smart contracts on Ethereum or Polygon.
-- Integrate the contract addresses with the backend to interact with them.
-
-### 5. Run the application:
-- **Frontend**:
-```bash
-cd frontend
-npm start
-```
-- **Backend**:
-```bash
-cd backend
-python app.py
+freelancing-platform/
+├── backend/               # Flask backend code
+│   ├── app.py             # Main application file
+├── frontend/              # React.js frontend code
+│   ├── src/               # Source code
+│   ├── components/        # React components
+├── README.md              # Project documentation
 ```
 
 ## Contributing
+Contributions are welcome! Please fork the repository and submit a pull request with your changes.
 
-We welcome contributions from developers who share our vision to improve the freelancing ecosystem. Feel free to fork this repository, create a branch, and submit a pull request with your improvements or bug fixes.
-
-## Future Plans
-
-- **Multi-chain Support**: Support for multiple blockchains (Ethereum, Polygon, Binance Smart Chain) to enhance scalability and reduce transaction fees.
-- **Mobile App**: Build a mobile version of the platform for seamless freelance management on the go.
-- **Advanced AI**: Implement AI features like skill matching and project recommendation systems.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Acknowledgments
+- **MetaMask** for seamless blockchain integration.
+- **IPFS/Skynet** for decentralized file hosting.
+- **MongoDB** for a reliable database solution.
