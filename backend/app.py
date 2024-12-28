@@ -13,8 +13,8 @@ import re  # Add regex for wallet address validation
 load_dotenv()
 
 app = Flask(__name__)
-#CORS(app, resources={r"/api/*": {"origins": "*"}})
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+#CORS(app)
 # MongoDB Connection
 MONGO_URI = "mongodb+srv://skpvikaash:vikash100@cluster0.k3mnor2.mongodb.net/?retryWrites=true&w=majority"
 try:
@@ -325,44 +325,7 @@ def get_created_jobs(wallet_address):
             "details": str(e)
         }), 500
 
-@app.route('/api/projects/ongoing/<wallet_address>', methods=['GET'])
-def get_ongoing_projects(wallet_address):
-    try:
-        # Find ongoing projects for the user
-        ongoing_projects = list(ongoing_projects_collection.find({
-            'applicantWallet': wallet_address,
-            'status': 'ongoing'
-        }))
-        
-        # Fetch corresponding jobs with additional details
-        projects = []
-        for project in ongoing_projects:
-            job = jobs_collection.find_one({'_id': project['jobId']})
-            if job:
-                project_details = {
-                    '_id': str(job['_id']),
-                    'title': job.get('title', ''),
-                    'description': job.get('description', ''),
-                    'creatorWallet': job.get('creatorWallet', ''),
-                    'milestones': project.get('milestones', []),
-                    'applicationDetails': {
-                        'status': project['status'],
-                        'startedAt': project['startedAt'],
-                        'expectedBudget': project.get('expectedBudget', ''),
-                        'estimatedTime': project.get('estimatedTime', '')
-                    }
-                }
-                projects.append(project_details)
-        
-        return jsonify(projects), 200
 
-    except Exception as e:
-        print("Error fetching ongoing projects:")
-        traceback.print_exc()
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
 
 @app.route('/api/jobs/applications/<application_id>/confirm', methods=['POST'])
 def confirm_application(application_id):
@@ -395,7 +358,9 @@ def confirm_application(application_id):
             'status': 'ongoing',
             'startedAt': datetime.utcnow(),
             'expectedBudget': application.get('expectedBudget', ''),
-            'estimatedTime': application.get('estimatedTime', '')
+            'estimatedTime': application.get('estimatedTime', ''),
+            'totalFunded': 0,  # Initialize total funded
+            'fundings': []  # Initialize fundings array
         }
         
         # Insert ongoing project
@@ -561,6 +526,367 @@ def get_job_applications(job_id):
             "error": "Internal server error",
             "details": str(e)
         }), 500
+    
+@app.route('/api/projects/fund', methods=['POST'])
+def fund_project():
+    try:
+        # Get funding data from request
+        funding_data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['projectId', 'fundingWallet', 'amount', 'transactionHash']
+        for field in required_fields:
+            if not funding_data.get(field):
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Find the project
+        project = ongoing_projects_collection.find_one({
+            '_id': ObjectId(funding_data['projectId'])
+        })
+        
+        if not project:
+            return jsonify({"error": "Project not found"}), 404
+        
+        # Prepare funding record
+        funding_record = {
+            'projectId': ObjectId(funding_data['projectId']),
+            'fundingWallet': funding_data['fundingWallet'],
+            'amount': float(funding_data['amount']),
+            'transactionHash': funding_data['transactionHash'],
+            'fundedAt': datetime.utcnow()
+        }
+        
+        # Update project with funding information
+        ongoing_projects_collection.update_one(
+            {'_id': ObjectId(funding_data['projectId'])},
+            {
+                '$push': {'fundings': funding_record},
+                '$inc': {'totalFunded': float(funding_data['amount'])}
+            }
+        )
+        
+        return jsonify({
+            "message": "Project funded successfully",
+            "fundingDetails": funding_record
+        }), 200
+    
+    except Exception as e:
+        print("Error funding project:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
+    
+@app.route('/api/projects/<project_id>/milestones', methods=['PATCH'])
+def update_milestone_status(project_id):
+    print("=" * 50)
+    print(f"Received project_id: {project_id}")
+    print(f"Project ID type: {type(project_id)}")
+    
+    try:
+        # Comprehensive logging of all ongoing projects
+        print("All Ongoing Projects:")
+        all_projects = list(ongoing_projects_collection.find())
+        for proj in all_projects:
+            print(f"Project in DB:")
+            print(f"  _id: {proj['_id']}")
+            print(f"  _id type: {type(proj['_id'])}")
+            print(f"  _id str representation: {str(proj['_id'])}")
+            print(f"  jobId: {proj.get('jobId')}")
+            print(f"  applicantWallet: {proj.get('applicantWallet')}")
+            print("-" * 30)
+
+        # Comprehensive ID conversion
+        def convert_to_object_id(id_value):
+            if isinstance(id_value, str):
+                return ObjectId(id_value)
+            elif isinstance(id_value, dict) and '$oid' in id_value:
+                return ObjectId(id_value['$oid'])
+            elif isinstance(id_value, ObjectId):
+                return id_value
+            else:
+                raise ValueError(f"Unsupported ID type: {type(id_value)}")
+
+        # Convert project_id to ObjectId
+        try:
+            project_object_id = convert_to_object_id(project_id)
+            print(f"Converted project_id: {project_object_id}")
+            print(f"Converted project_id type: {type(project_object_id)}")
+        except Exception as id_error:
+            print(f"ID conversion error: {id_error}")
+            return jsonify({
+                "error": "Invalid project ID format", 
+                "details": str(id_error)
+            }), 400
+
+        # Try different query methods
+        print("Attempting to find project...")
+        
+        # Method 1: Direct ObjectId match
+        project_direct = ongoing_projects_collection.find_one({"_id": project_object_id})
+        print(f"Direct ObjectId match: {project_direct is not None}")
+        
+        # Method 2: String representation match
+        project_str_match = ongoing_projects_collection.find_one({"_id": str(project_object_id)})
+        print(f"String representation match: {project_str_match is not None}")
+        
+        # Method 3: Partial match on jobId
+        projects_by_job_id = list(ongoing_projects_collection.find({"jobId": project_object_id}))
+        print(f"Projects matching jobId: {len(projects_by_job_id)}")
+        
+        # If no project found
+        if not project_direct and not project_str_match and not projects_by_job_id:
+            return jsonify({
+                "error": "Project not found", 
+                "searched_id": str(project_object_id),
+                "searched_id_type": str(type(project_object_id))
+            }), 404
+
+        # Use the first found project
+        project = project_direct or project_str_match or projects_by_job_id[0]
+
+        # Rest of the existing update logic...
+        request_data = request.get_json()
+        print(f"Received request data: {request_data}")
+
+        if not request_data or 'milestones' not in request_data:
+            print("No milestones data in request")
+            return jsonify({"error": "Milestones data is required"}), 400
+
+        # Update milestones
+        result = ongoing_projects_collection.update_one(
+            {"_id": project['_id']},  # Use the found project's _id
+            {"$set": {"milestones": request_data['milestones']}}
+        )
+
+        print(f"Update result: {result.modified_count}")
+
+        return jsonify({
+            "message": "Milestones updated successfully", 
+            "milestones": request_data['milestones']
+        }), 200
+
+    except Exception as e:
+        print("Error updating milestone status:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error", 
+            "details": str(e)
+        }), 500
+    
+@app.route('/api/projects/<project_id>/milestones', methods=['GET'])
+def get_project_milestones(project_id):
+    try:
+        # Print out the received project_id for debugging
+        print(f"Received project_id: {project_id}")
+        print(f"Type of project_id: {type(project_id)}")
+
+        # Try multiple query methods
+        project = None
+        
+        # Try direct ObjectId match
+        try:
+            project = ongoing_projects_collection.find_one({"_id": ObjectId(project_id)})
+        except Exception as e:
+            print(f"Direct ObjectId match failed: {e}")
+
+        # If direct match fails, try string match
+        if not project:
+            project = ongoing_projects_collection.find_one({"_id": project_id})
+
+        # If still no project found, try matching on jobId
+        if not project:
+            project = ongoing_projects_collection.find_one({"jobId": ObjectId(project_id)})
+
+        # Log all ongoing projects for debugging
+        print("All Ongoing Projects:")
+        for p in ongoing_projects_collection.find():
+            print(f"Project: {p.get('_id')}, JobId: {p.get('jobId')}")
+
+        if not project:
+            return jsonify({
+                "error": "Project not found", 
+                "project_id": project_id,
+                "project_id_type": str(type(project_id))
+            }), 404
+        
+        # Ensure milestones exist
+        milestones = project.get('milestones', [])
+        
+        return jsonify(milestones), 200
+
+    except Exception as e:
+        print("Error fetching project milestones:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error", 
+            "details": str(e),
+            "project_id": project_id
+        }), 500
+
+@app.route('/api/projects/<project_id>/submit', methods=['PATCH'])
+def submit_project_link(project_id):
+    try:
+        # Get submission data from request
+        submission_data = request.get_json()
+        
+        # Validate required fields
+        if not submission_data or 'submissionLink' not in submission_data:
+            return jsonify({"error": "Submission link is required"}), 400
+        
+        # Validate the submission link (optional - add more robust validation if needed)
+        submission_link = submission_data['submissionLink'].strip()
+        if not submission_link:
+            return jsonify({"error": "Submission link cannot be empty"}), 400
+        
+        # Find the project
+        project = ongoing_projects_collection.find_one({
+            '_id': ObjectId(project_id)
+        })
+        
+        if not project:
+            return jsonify({"error": "Project not found"}), 404
+        
+        # Update project with submission link
+        result = ongoing_projects_collection.update_one(
+            {'_id': ObjectId(project_id)},
+            {
+                '$set': {
+                    'submissionLink': submission_link,
+                    'submittedAt': datetime.utcnow(),
+                    'status': 'submitted'  # Update project status
+                }
+            }
+        )
+        
+        return jsonify({
+            "message": "Project submitted successfully",
+            "submissionLink": submission_link
+        }), 200
+    
+    except Exception as e:
+        print("Error submitting project link:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+@app.route('/api/projects/<project_id>/finish', methods=['PATCH'])
+def finish_project(project_id):
+    try:
+        # Find the project
+        project = ongoing_projects_collection.find_one({
+            '_id': ObjectId(project_id)
+        })
+        
+        if not project:
+            return jsonify({"error": "Project not found"}), 404
+        
+        # Check if all milestones are completed
+        milestones = project.get('milestones', [])
+        if not all(milestone.get('status') == 'done' for milestone in milestones):
+            return jsonify({
+                "error": "Cannot finish project. Not all milestones are completed.",
+                "incomplete_milestones": [
+                    m['title'] for m in milestones if m.get('status') != 'done'
+                ]
+            }), 400
+        
+        # Check if submission link exists
+        if not project.get('submissionLink'):
+            return jsonify({
+                "error": "Project submission link is required before finishing"
+            }), 400
+        
+        # Update project status
+        result = ongoing_projects_collection.update_one(
+            {'_id': ObjectId(project_id)},
+            {
+                '$set': {
+                    'status': 'completed',
+                    'completedAt': datetime.utcnow()
+                }
+            }
+        )
+        
+        # Optional: Update the original job status
+        if 'jobId' in project:
+            jobs_collection.update_one(
+                {'_id': project['jobId']},
+                {'$set': {'status': 'completed'}}
+            )
+        
+        return jsonify({
+            "message": "Project completed successfully",
+            "completedAt": datetime.utcnow().isoformat()
+        }), 200
+    
+    except Exception as e:
+        print("Error finishing project:")
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
+
+@app.route('/api/projects/ongoing/<wallet_address>', methods=['GET'])
+def get_ongoing_projects(wallet_address):
+    try:
+        # Find ongoing projects for the user
+        # Update this method to include more project details
+        ongoing_projects = list(ongoing_projects_collection.find({
+            '$or': [
+                {'applicantWallet': wallet_address},
+                {'creatorWallet': wallet_address}
+            ],
+            'status': {'$in': ['ongoing', 'submitted']}  # Include both ongoing and submitted projects
+        }))
+        
+        # Fetch corresponding jobs with additional details
+        projects = []
+        for project in ongoing_projects:
+            job = jobs_collection.find_one({'_id': project['jobId']})
+            if job:
+                # Ensure milestones have a status, default to 'not done' if not present
+                processed_milestones = []
+                for milestone in project.get('milestones', []):
+                    processed_milestone = {
+                        'title': milestone.get('title', ''),
+                        'description': milestone.get('description', ''),
+                        'deadline': milestone.get('deadline'),
+                        'status': milestone.get('status', 'not done')  # Default to 'not done'
+                    }
+                    processed_milestones.append(processed_milestone)
+
+                project_details = {
+                    '_id': str(project['_id']),
+                    'title': job.get('title', ''),
+                    'description': job.get('description', ''),
+                    'creatorWallet': job.get('creatorWallet', ''),
+                    'applicantWallet': project.get('applicantWallet', ''),
+                    'milestones': processed_milestones,
+                    'status': project.get('status', 'ongoing'),
+                    'submissionLink': project.get('submissionLink'),
+                    'applicationDetails': {
+                        'startedAt': project.get('startedAt'),
+                        'expectedBudget': project.get('expectedBudget', ''),
+                        'estimatedTime': project.get('estimatedTime', '')
+                    }
+                }
+                projects.append(project_details)
+        
+        return jsonify(projects), 200
+
+    except Exception as e:
+        print("Error fetching ongoing projects:", e)
+        traceback.print_exc()
+        return jsonify({
+            "error": "Internal server error", 
+            "details": str(e)
+        }), 500
+    
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
